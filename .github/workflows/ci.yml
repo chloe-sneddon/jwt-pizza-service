@@ -5,15 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:
-
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-
     outputs:
       version: ${{ steps.set_version.outputs.version }}
-
     services:
       mysql:
         image: mysql:8.0.29
@@ -21,13 +18,9 @@ jobs:
           MYSQL_ROOT_PASSWORD: tempdbpassword
           MYSQL_DATABASE: pizza
         ports:
-          - "3306:3306"
+          - '3306:3306'
         options: >-
-          --health-cmd "mysqladmin ping -ptempdbpassword"
-          --health-interval 10s
-          --health-start-period 10s
-          --health-timeout 5s
-          --health-retries 10
+          --health-cmd "mysqladmin ping -ptempdbpassword" --health-interval 10s --health-start-period 10s --health-timeout 5s --health-retries 10
 
     steps:
       - name: Checkout repo
@@ -36,14 +29,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: "24.x"
+          node-version: '24.x'
 
-      - name: Set version
-        id: set_version
-        run: |
-          version=$(date +'%Y%m%d.%H%M%S')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          printf '{"version": "%s" }' "$version" > src/version.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Write config file
         run: |
@@ -65,11 +57,18 @@ jobs:
             },
           };" > src/config.js
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
       - name: Tests
         run: npm test
+
+      - name: set version
+        id: set_version
+        run: |
+          version=$(date +'%Y%m%d.%H%M%S')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          printf '{"version": "%s" }' "$version" > src/version.json
+
+      - name: Update coverage
+        run: |
+          coverage=$(jq '.total.lines.pct' coverage/coverage-summary.json)
+          color=$(echo "$coverage < 80" | bc | awk '{if ($1) print "red"; else print "green"}')
+          curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
