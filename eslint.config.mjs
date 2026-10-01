@@ -18,6 +18,15 @@ export default defineConfig([
     },
   },
   {
+    files: ['**/*.test.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
+  },
+  {
     rules: {
       semi: 'error',
     },
