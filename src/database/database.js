@@ -54,59 +54,62 @@ class DB {
       connection.end();
     }
   }
-  async getUsers(page = 1, limit = config.db.listPerPage) {
-  const parsedPage = Number(page);
-  const parsedLimit = Number(limit);
+  async getUsers(page = 1, limit = config.db.listPerPage, nameFilter = '*') {
+    const parsedPage = Number(page);
+    const parsedLimit = Number(limit);
 
-  const currentPage =
-    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-  const pageLimit =
-    Number.isInteger(parsedLimit) && parsedLimit > 0
-      ? parsedLimit
-      : config.db.listPerPage;
+    const currentPage =
+      Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const pageLimit =
+      Number.isInteger(parsedLimit) && parsedLimit > 0
+        ? parsedLimit
+        : config.db.listPerPage;
 
-  const offset = (currentPage - 1) * pageLimit;
-  const connection = await this.getConnection();
+    const offset = (currentPage - 1) * pageLimit;
+    const namePattern = String(nameFilter).replace(/\*/g, '%');
+    const connection = await this.getConnection();
 
-  try {
-    const rows = await this.query(
-      connection,
-      `SELECT users.id, users.name, users.email, ur.role, ur.objectId
-       FROM (
-         SELECT id, name, email
-         FROM user
-         ORDER BY id
-         LIMIT ${pageLimit} OFFSET ${offset}
-       ) AS users
-       LEFT JOIN userRole AS ur ON users.id = ur.userId
-       ORDER BY users.id`
-    );
+    try {
+      const rows = await this.query(
+        connection,
+        `SELECT users.id, users.name, users.email, ur.role, ur.objectId
+        FROM (
+          SELECT id, name, email
+          FROM user
+          WHERE name LIKE ?
+          ORDER BY id
+          LIMIT ${pageLimit} OFFSET ${offset}
+        ) AS users
+        LEFT JOIN userRole AS ur ON users.id = ur.userId
+        ORDER BY users.id`,
+        [namePattern]
+      );
 
-    const usersById = new Map();
+      const usersById = new Map();
 
-    for (const row of rows) {
-      if (!usersById.has(row.id)) {
-        usersById.set(row.id, {
-          id: row.id,
-          name: row.name,
-          email: row.email,
-          roles: [],
-        });
+      for (const row of rows) {
+        if (!usersById.has(row.id)) {
+          usersById.set(row.id, {
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            roles: [],
+          });
+        }
+
+        if (row.role) {
+          usersById.get(row.id).roles.push({
+            objectId: row.objectId || undefined,
+            role: row.role,
+          });
+        }
       }
 
-      if (row.role) {
-        usersById.get(row.id).roles.push({
-          objectId: row.objectId || undefined,
-          role: row.role,
-        });
-      }
+      return [...usersById.values()];
+    } finally {
+      connection.end();
     }
-
-    return [...usersById.values()];
-  } finally {
-    connection.end();
   }
-}
 
   async getUser(email, password) {
     const connection = await this.getConnection();

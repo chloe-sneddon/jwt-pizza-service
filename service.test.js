@@ -389,7 +389,7 @@ test('list users', async () => {
   const listedUser = {
     id: user.id,
     name: user.name,
-    eamil: user.email,
+    email: user.email,
     roles: user.roles,
   }
   const users = [listedUser];
@@ -403,7 +403,7 @@ test('list users', async () => {
   expect(listUsersRes.body).toEqual({ users });
 });
 
-test('passes pagination values to the user query', async () => {
+test('list user pagination values', async () => {
   DB.addUser.mockImplementation(async (newUser) => ({
     ...newUser,
     id: 3,
@@ -415,11 +415,30 @@ test('passes pagination values to the user query', async () => {
   const [, userToken] = await registerUser(request(app));
 
   const response = await request(app)
-    .get('/api/user?page=2&limit=5')
+    .get('/api/user?page=2&limit=5&name=*')
     .set('Authorization', 'Bearer ' + userToken);
 
   expect(response.status).toBe(200);
-  expect(DB.getUsers).toHaveBeenCalledWith('2', '5');
+  expect(DB.getUsers).toHaveBeenCalledWith('2', '5', '*');
+});
+
+test('list users filter', async () => {
+  DB.addUser.mockImplementation(async (newUser) => ({
+    ...newUser,
+    id: 3,
+    password: undefined,
+  }));
+  DB.isLoggedIn.mockResolvedValue(true);
+  DB.getUsers.mockResolvedValue([]);
+
+  const [, userToken] = await registerUser(request(app));
+
+  const response = await request(app)
+    .get('/api/user?name=*Pizza*')
+    .set('Authorization', 'Bearer ' + userToken);
+
+  expect(response.status).toBe(200);
+  expect(DB.getUsers).toHaveBeenCalledWith(undefined, undefined, '*Pizza*');
 });
 
 async function registerUser(service) {

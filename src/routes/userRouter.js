@@ -58,6 +58,7 @@ userRouter.get(
     const users = await DB.getUsers(
       req.query.page,
       req.query.limit,
+      req.query.name,
     );
     res.json({users});
   }),
