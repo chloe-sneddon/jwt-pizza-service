@@ -25,6 +25,7 @@ jest.mock('./src/database/database.js', () => ({
     createStore: jest.fn(),
     deleteStore: jest.fn(),
     updateUser: jest.fn(),
+    getUsers: jest.fn(),
   },
 }));
 
@@ -377,11 +378,48 @@ test('list users unauthorized', async () => {
 });
 
 test('list users', async () => {
+  DB.addUser.mockImplementation(async (newUser) => ({
+    ...newUser,
+    id: 3,
+    password: undefined
+  }));
+  DB.isLoggedIn.mockResolvedValue(true);
+  
   const [user, userToken] = await registerUser(request(app));
+  const listedUser = {
+    id: user.id,
+    name: user.name,
+    eamil: user.email,
+    roles: user.roles,
+  }
+  const users = [listedUser];
+
+  DB.getUsers.mockResolvedValue(users);
+
   const listUsersRes = await request(app)
     .get('/api/user')
     .set('Authorization', 'Bearer ' + userToken);
   expect(listUsersRes.status).toBe(200);
+  expect(listUsersRes.body).toEqual({ users });
+});
+
+test('passes pagination values to the user query', async () => {
+  DB.addUser.mockImplementation(async (newUser) => ({
+    ...newUser,
+    id: 3,
+    password: undefined,
+  }));
+  DB.isLoggedIn.mockResolvedValue(true);
+  DB.getUsers.mockResolvedValue([]);
+
+  const [, userToken] = await registerUser(request(app));
+
+  const response = await request(app)
+    .get('/api/user?page=2&limit=5')
+    .set('Authorization', 'Bearer ' + userToken);
+
+  expect(response.status).toBe(200);
+  expect(DB.getUsers).toHaveBeenCalledWith('2', '5');
 });
 
 async function registerUser(service) {
