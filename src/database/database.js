@@ -78,7 +78,7 @@ class DB {
           FROM user
           WHERE name LIKE ?
           ORDER BY id
-          LIMIT ${pageLimit} OFFSET ${offset}
+          LIMIT ${pageLimit + 1} OFFSET ${offset}
         ) AS users
         LEFT JOIN userRole AS ur ON users.id = ur.userId
         ORDER BY users.id`,
@@ -105,7 +105,9 @@ class DB {
         }
       }
 
-      return [...usersById.values()];
+      const users = [...usersById.values()];
+      const more = users.length > pageLimit;
+      return [users.slice(0, pageLimit), more];
     } finally {
       connection.end();
     }
@@ -134,22 +136,54 @@ class DB {
   async updateUser(userId, name, email, password) {
     const connection = await this.getConnection();
     try {
+      const updates = [];
       const params = [];
       if (password) {
         const hashedPassword = await bcrypt.hash(password, 10);
-        params.push(`password='${hashedPassword}'`);
+        updates.push('password=?');
+        params.push(hashedPassword);
       }
       if (email) {
-        params.push(`email='${email}'`);
+        updates.push('email=?');
+        params.push(email);
       }
       if (name) {
-        params.push(`name='${name}'`);
+        updates.push('name=?');
+        params.push(name);
       }
-      if (params.length > 0) {
-        const query = `UPDATE user SET ${params.join(', ')} WHERE id=${userId}`;
-        await this.query(connection, query);
+      if (updates.length > 0) {
+        await this.query(connection, `UPDATE user SET ${updates.join(', ')} WHERE id=?`, [...params, userId]);
       }
-      return this.getUser(email, password);
+
+      const userRows = await this.query(connection, 'SELECT id, name, email FROM user WHERE id=?', [userId]);
+      if (userRows.length === 0) {
+        throw new StatusCodeError('unknown user', 404);
+      }
+
+      const roleRows = await this.query(connection, 'SELECT role, objectId FROM userRole WHERE userId=?', [userId]);
+      const roles = roleRows.map(({ role, objectId }) => ({ objectId: objectId || undefined, role }));
+      return { ...userRows[0], roles };
+    } finally {
+      connection.end();
+    }
+  }
+
+  async deleteUser(userId) {
+    const connection = await this.getConnection();
+    try {
+      await connection.beginTransaction();
+      try {
+        await this.query(connection, 'DELETE FROM auth WHERE userId=?', [userId]);
+        await this.query(connection, 'DELETE FROM userRole WHERE userId=?', [userId]);
+        const result = await this.query(connection, 'DELETE FROM user WHERE id=?', [userId]);
+        if (result.affectedRows === 0) {
+          throw new StatusCodeError('unknown user', 404);
+        }
+        await connection.commit();
+      } catch (err) {
+        await connection.rollback();
+        throw err;
+      }
     } finally {
       connection.end();
     }

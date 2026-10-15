@@ -26,6 +26,7 @@ jest.mock('./src/database/database.js', () => ({
     deleteStore: jest.fn(),
     updateUser: jest.fn(),
     getUsers: jest.fn(),
+    deleteUser: jest.fn(),
   },
 }));
 
@@ -377,30 +378,39 @@ test('list users unauthorized', async () => {
   expect(listUsersRes.status).toBe(401);
 });
 
+test('rejects listing users for a non-admin', async () => {
+  const response = await request(app)
+    .get('/api/user')
+    .set('Authorization', authHeaderFor(diner));
+
+  expect(response.status).toBe(403);
+});
+
 test('list users', async () => {
   DB.addUser.mockImplementation(async (newUser) => ({
     ...newUser,
     id: 3,
-    password: undefined
+    password: undefined,
+    roles: [{ role: Role.Admin }],
   }));
   DB.isLoggedIn.mockResolvedValue(true);
-  
+
   const [user, userToken] = await registerUser(request(app));
   const listedUser = {
     id: user.id,
     name: user.name,
     email: user.email,
     roles: user.roles,
-  }
+  };
   const users = [listedUser];
 
-  DB.getUsers.mockResolvedValue(users);
+  DB.getUsers.mockResolvedValue([users, false]);
 
   const listUsersRes = await request(app)
     .get('/api/user')
     .set('Authorization', 'Bearer ' + userToken);
   expect(listUsersRes.status).toBe(200);
-  expect(listUsersRes.body).toEqual({ users });
+  expect(listUsersRes.body).toEqual({ users, more: false });
 });
 
 test('list user pagination values', async () => {
@@ -408,9 +418,10 @@ test('list user pagination values', async () => {
     ...newUser,
     id: 3,
     password: undefined,
+    roles: [{ role: Role.Admin }],
   }));
   DB.isLoggedIn.mockResolvedValue(true);
-  DB.getUsers.mockResolvedValue([]);
+  DB.getUsers.mockResolvedValue([[], false]);
 
   const [, userToken] = await registerUser(request(app));
 
@@ -427,9 +438,10 @@ test('list users filter', async () => {
     ...newUser,
     id: 3,
     password: undefined,
+    roles: [{ role: Role.Admin }],
   }));
   DB.isLoggedIn.mockResolvedValue(true);
-  DB.getUsers.mockResolvedValue([]);
+  DB.getUsers.mockResolvedValue([[], false]);
 
   const [, userToken] = await registerUser(request(app));
 
@@ -439,6 +451,31 @@ test('list users filter', async () => {
 
   expect(response.status).toBe(200);
   expect(DB.getUsers).toHaveBeenCalledWith(undefined, undefined, '*Pizza*');
+});
+
+test('rejects deleting a user without authentication', async () => {
+  const response = await request(app).delete(`/api/user/${diner.id}`);
+
+  expect(response.status).toBe(401);
+});
+
+test('rejects user deletion by a non-admin', async () => {
+  const response = await request(app)
+    .delete(`/api/user/${diner.id}`)
+    .set('Authorization', authHeaderFor(diner));
+
+  expect(response.status).toBe(403);
+});
+
+test('allows an admin to delete a user', async () => {
+  DB.deleteUser.mockResolvedValue(undefined);
+  const response = await request(app)
+    .delete(`/api/user/${diner.id}`)
+    .set('Authorization', authHeaderFor(admin));
+
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({ message: 'user deleted' });
+  expect(DB.deleteUser).toHaveBeenCalledWith(diner.id);
 });
 
 async function registerUser(service) {

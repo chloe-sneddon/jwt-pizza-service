@@ -6,7 +6,8 @@
   "scripts": {
     "start": "cd src && node index.js",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "test:integration": "jest --config jest.integration.config.json --runInBand"
   },
   "license": "MIT",
   "dependencies": {

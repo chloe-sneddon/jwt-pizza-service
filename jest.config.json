@@ -1,5 +1,11 @@
 {
   "collectCoverage": true,
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "serviceIntegration.test.js",
+    "userUpdateIntegration.test.js",
+    "userDeleteIntegration.test.js"
+  ],
   "coverageReporters": [
     "json-summary",
     "text"

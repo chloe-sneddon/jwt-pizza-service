@@ -1,0 +1,4 @@
+{
+  "testRegex": ".*Integration\\.test\\.js$",
+  "collectCoverage": false
+}
